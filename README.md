@@ -94,18 +94,19 @@ tokens, and runs behind the machine-wide flock in `pixi run bench`.
 
 | case | mojo-sqlglot | sqlglot 28.10.1 | relative |
 | --- | ---: | ---: | ---: |
-| tokenize 750 queries (0.23 MB) | 165.89 ms | 360.96 ms | 2.18x faster |
-| parse 750 SELECT queries | 600.63 ms | 1812.89 ms | 3.02x faster |
-| transpile 500 MySQL queries | 189.00 ms | 559.71 ms | 2.96x faster |
-| simplify 1,000 queries | 483.08 ms | 1823.72 ms | 3.78x faster |
+| tokenize 750 queries (0.23 MB) | 116.95 ms | 345.72 ms | 2.96x faster |
+| parse 750 SELECT queries | 496.47 ms | 1635.49 ms | 3.29x faster |
+| transpile 500 MySQL queries | 140.99 ms | 514.58 ms | 3.65x faster |
+| simplify 1,000 queries | 441.75 ms | 2021.38 ms | 4.58x faster |
 
 Creating compatible Python `Token` objects and decoding their text is included
 in the tokenization measurement. These numbers measure the supported subset,
 not full-feature equivalence with upstream.
 
-There is no GPU path. Lexing is a branch-heavy, ordered scan with low arithmetic
-intensity, while the public API must also create Python token and expression
-objects.
+There is no parallel or GPU path. Lexing is a branch-heavy, ordered scan with
+far less than the roughly 2 flops per byte needed to justify GPU transfers, and
+the native scan is too short for thread-launch overhead to pay back. The public
+API must also create Python token and expression objects serially.
 
 ## How it works
 
@@ -120,11 +121,11 @@ The wrapper rejects negative lengths, null pointers for non-empty buffers, and
 misaligned output pointers before constructing Mojo pointers.
 
 The scanner makes one pass over the byte buffer. Python then turns its spans
-into compatible token objects, folds compound keywords such as `GROUP BY`, and
-feeds a recursive-descent query parser with a Pratt expression parser. The
-expression tree remains ordinary Python so traversal, mutation, custom rules,
-and dialect-specific generation do not require object ownership across the
-FFI boundary.
+into compatible token objects through zero-copy memory views, folds compound
+keywords such as `GROUP BY`, and feeds a recursive-descent query parser with a
+Pratt expression parser. The expression tree remains ordinary Python so
+traversal, mutation, custom rules, and dialect-specific generation do not
+require object ownership across the FFI boundary.
 
 ## License
 

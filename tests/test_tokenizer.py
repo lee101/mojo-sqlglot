@@ -50,6 +50,13 @@ def test_tokenizer_unicode_offsets_are_character_offsets():
     assert token_rows(got) == token_rows(ref)
 
 
+def test_incremental_newline_positions_match_upstream():
+    sql = "SELECT\n\n  café,\n  '東京\n駅' AS place\nFROM résumé"
+    assert token_rows(mojo.Tokenizer().tokenize(sql)) == token_rows(
+        upstream.Tokenizer().tokenize(sql)
+    )
+
+
 def test_compound_keywords_match_upstream():
     sql = "SELECT a FROM t GROUP BY a ORDER BY a"
     assert [token.token_type.name for token in mojo.Tokenizer().tokenize(sql)] == [

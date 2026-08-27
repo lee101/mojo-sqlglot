@@ -175,17 +175,23 @@ def _positions(sql: str, offsets: list[int]) -> dict[int, int]:
 def tokenize(sql: str) -> list[Token]:
     data = sql.encode("utf-8")
     starts, ends, kinds = scan(data)
-    raw_spans = [(int(a), int(b), int(k)) for a, b, k in zip(starts, ends, kinds)]
+    start_values = memoryview(starts)
+    end_values = memoryview(ends)
+    kind_values = memoryview(kinds)
     char_pos = (
         None
         if len(data) == len(sql)
-        else _positions(sql, [x for span in raw_spans for x in span[:2]])
+        else _positions(
+            sql,
+            [offset for pair in zip(start_values, end_values) for offset in pair],
+        )
     )
-    newlines = [index for index, char in enumerate(sql) if char == "\n"]
+    next_newline = sql.find("\n")
     newline_count = 0
     last_newline = -1
     tokens: list[Token] = []
-    for byte_start, byte_end, kind in raw_spans:
+    append_token = tokens.append
+    for byte_start, byte_end, kind in zip(start_values, end_values, kind_values):
         if char_pos is None:
             start, end_exclusive = byte_start, byte_end
         else:
@@ -193,7 +199,9 @@ def tokenize(sql: str) -> list[Token]:
         raw = sql[start:end_exclusive]
         quoted = kind == 4
         if kind == 1:
-            token_type = _KEYWORDS.get(raw.upper(), TokenType.VAR)
+            token_type = _KEYWORDS.get(raw)
+            if token_type is None:
+                token_type = _KEYWORDS.get(raw.upper(), TokenType.VAR)
             text = raw
         elif kind == 2:
             token_type, text = TokenType.NUMBER, raw
@@ -206,22 +214,21 @@ def tokenize(sql: str) -> list[Token]:
             text = raw[1:-1].replace(close + close, close)
         else:
             token_type, text = _PUNCTUATION[kind], raw
-        while (
-            newline_count < len(newlines)
-            and newlines[newline_count] < end_exclusive
-        ):
-            last_newline = newlines[newline_count]
+        while next_newline != -1 and next_newline < end_exclusive:
+            last_newline = next_newline
             newline_count += 1
+            next_newline = sql.find("\n", next_newline + 1)
         line = newline_count + 1
         col = end_exclusive - last_newline - 1
         if token_type is TokenType.BY and tokens:
             previous = tokens[-1]
             if previous.token_type is TokenType.VAR:
-                compound = _COMPOUND_KEYWORDS.get(previous.text.upper())
+                previous_upper = previous.text.upper()
+                compound = _COMPOUND_KEYWORDS.get(previous_upper)
                 if compound is not None:
                     tokens[-1] = Token(
                         compound,
-                        f"{previous.text.upper()} BY",
+                        f"{previous_upper} BY",
                         line,
                         col,
                         previous.start,
@@ -229,7 +236,7 @@ def tokenize(sql: str) -> list[Token]:
                         raw=previous.raw + " " + raw,
                     )
                     continue
-        tokens.append(
+        append_token(
             Token(token_type, text, line, col, start, end_exclusive - 1, raw=raw, quoted=quoted)
         )
     return tokens
