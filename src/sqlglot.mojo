@@ -184,7 +184,7 @@ def scan(
         if is_word_start(c):
             i += 1
             while i + W <= n:
-                var chars = src.load[width=W](i)
+                var chars = src.unsafe_load[width=W](i)
                 var word_chars = (
                     (chars.ge(65) & chars.le(90))
                     | (chars.ge(97) & chars.le(122))
@@ -254,7 +254,7 @@ def scan(
         elif c == 63 or c == 64 or c == 36:
             kind = K_PARAMETER
             while i + W <= n:
-                var chars = src.load[width=W](i)
+                var chars = src.unsafe_load[width=W](i)
                 var word_chars = (
                     (chars.ge(65) & chars.le(90))
                     | (chars.ge(97) & chars.le(122))
